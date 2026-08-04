@@ -16,6 +16,7 @@ from frigate.config.camera.updater import (
 )
 from frigate.const import REPLAY_CAMERA_PREFIX
 from frigate.models import Regions
+from frigate.object_detection.parallel import lane_names
 from frigate.util.builtin import empty_and_close_queue
 from frigate.util.image import SharedMemoryFrameManager, UntrackedSharedMemory
 from frigate.util.object import get_camera_regions_grid
@@ -126,23 +127,29 @@ class CameraMaintainer(threading.Thread):
                 max(self.config.model.width, self.config.model.height),
             )
 
-            try:
-                largest_frame = max(
-                    [
-                        det.model.height * det.model.width * 3
-                        if det.model is not None
-                        else 320
-                        for det in self.config.detectors.values()
-                    ]
-                )
-                UntrackedSharedMemory(name=f"out-{name}", create=True, size=20 * 6 * 4)
-                UntrackedSharedMemory(
-                    name=name,
-                    create=True,
-                    size=largest_frame,
-                )
-            except FileExistsError:
-                pass
+            largest_frame = max(
+                [
+                    det.model.height * det.model.width * 3
+                    if det.model is not None
+                    else 320
+                    for det in self.config.detectors.values()
+                ]
+            )
+
+            # One pair of segments per detector lane; see start_detectors() in
+            # app.py, which does the same for cameras present at startup.
+            for lane_name in lane_names(name, config.detect.lanes):
+                try:
+                    UntrackedSharedMemory(
+                        name=f"out-{lane_name}", create=True, size=20 * 6 * 4
+                    )
+                    UntrackedSharedMemory(
+                        name=lane_name,
+                        create=True,
+                        size=largest_frame,
+                    )
+                except FileExistsError:
+                    pass
 
         camera_process = CameraTracker(
             config,
