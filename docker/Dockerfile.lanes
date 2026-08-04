@@ -1,0 +1,20 @@
+# Overlay build for detect.lanes: layers this branch's five changed files
+# onto the stock upstream image, rather than rebuilding go2rtc/nginx/the web
+# UI from scratch. Lives here (not in the Talos IaC repo that builds it) so
+# it travels with the exact commit its COPY paths were cut against — see the
+# build Job that invokes this, which uses this repo as Kaniko's git context.
+#
+# Base tag MUST match this branch's parent tag (v0.18.0-beta3). Bumping it
+# means rebasing the branch onto the new tag first, or the base's
+# video/detect.py/app.py no longer match what these five files expect around
+# them. (Was v0.17.2 — rebased 2026-08-08 to pick up ffmpeg 8.0, required for
+# the Reolink Duo3 http-flv bridge; frigate/video.py became frigate/video/
+# in upstream's "Split apart video.py" #22631 during that rebase, hence the
+# COPY destination change below.)
+FROM ghcr.io/blakeblackshear/frigate:0.18.0-beta3-tensorrt
+
+COPY frigate/video/detect.py /opt/frigate/frigate/video/detect.py
+COPY frigate/app.py /opt/frigate/frigate/app.py
+COPY frigate/camera/maintainer.py /opt/frigate/frigate/camera/maintainer.py
+COPY frigate/config/camera/detect.py /opt/frigate/frigate/config/camera/detect.py
+COPY frigate/object_detection/parallel.py /opt/frigate/frigate/object_detection/parallel.py
