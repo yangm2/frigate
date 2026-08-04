@@ -69,6 +69,7 @@ from frigate.models import (
     User,
 )
 from frigate.object_detection.base import ObjectDetectProcess
+from frigate.object_detection.parallel import lane_names
 from frigate.output.output import OutputProcess
 from frigate.ptz.autotrack import PtzAutoTrackerThread
 from frigate.ptz.onvif import OnvifController
@@ -343,33 +344,38 @@ class FrigateApp:
         self.dispatcher.profile_manager = self.profile_manager
 
     def start_detectors(self) -> None:
-        for name in self.config.cameras.keys():
-            try:
-                largest_frame = max(
-                    [
-                        det.model.height * det.model.width * 3
-                        if det.model is not None
-                        else 320
-                        for det in self.config.detectors.values()
-                    ]
-                )
-                shm_in = UntrackedSharedMemory(
-                    name=name,
-                    create=True,
-                    size=largest_frame,
-                )
-            except FileExistsError:
-                shm_in = UntrackedSharedMemory(name=name)
+        largest_frame = max(
+            [
+                det.model.height * det.model.width * 3 if det.model is not None else 320
+                for det in self.config.detectors.values()
+            ]
+        )
 
-            try:
-                shm_out = UntrackedSharedMemory(
-                    name=f"out-{name}", create=True, size=20 * 6 * 4
-                )
-            except FileExistsError:
-                shm_out = UntrackedSharedMemory(name=f"out-{name}")
+        for name, camera in self.config.cameras.items():
+            # One pair of segments per detector lane. Lane 0 is the bare camera
+            # name, so a camera at the default `lanes: 1` allocates exactly what
+            # it always did. Sizing every lane off the largest configured model
+            # matters: the detector maps the input by its own model dimensions,
+            # not the camera's.
+            for lane_name in lane_names(name, camera.detect.lanes):
+                try:
+                    shm_in = UntrackedSharedMemory(
+                        name=lane_name,
+                        create=True,
+                        size=largest_frame,
+                    )
+                except FileExistsError:
+                    shm_in = UntrackedSharedMemory(name=lane_name)
 
-            self.detection_shms.append(shm_in)
-            self.detection_shms.append(shm_out)
+                try:
+                    shm_out = UntrackedSharedMemory(
+                        name=f"out-{lane_name}", create=True, size=20 * 6 * 4
+                    )
+                except FileExistsError:
+                    shm_out = UntrackedSharedMemory(name=f"out-{lane_name}")
+
+                self.detection_shms.append(shm_in)
+                self.detection_shms.append(shm_out)
 
         for name, detector_config in self.config.detectors.items():
             self.detectors[name] = ObjectDetectProcess(

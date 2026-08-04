@@ -309,6 +309,12 @@ detect:
   # Optional: desired fps for your camera for the input with the detect role (default: shown below)
   # NOTE: Recommended value of 5. Ideally, try and reduce your FPS on the camera.
   fps: 5
+  # Optional: number of detectors this camera may use concurrently for one frame's regions (default: shown below)
+  # A camera normally runs its regions one at a time against a single detector, so it is capped at
+  # (1000 / fps) / inference_speed_ms regions per frame however many detectors are configured. Raising this
+  # lets a busy camera use idle detectors, at the cost of the per-camera fairness that cap provides.
+  # Only useful when detectors outnumber cameras. Each lane costs one extra pair of shm segments.
+  lanes: 1
   # Optional: Number of consecutive detection hits required for an object to be initialized in the tracker. (default: 1/2 the frame rate)
   min_initialized: 2
   # Optional: Number of frames without a detection before Frigate considers an object to be gone. (default: 5x the frame rate)
