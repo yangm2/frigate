@@ -65,6 +65,12 @@ class DetectConfig(FrigateBaseModel):
         title="Detect FPS",
         description="Desired frames per second to run detection on; lower values reduce CPU usage (recommended value is 5, only set higher - at most 10 - if tracking extremely fast moving objects).",
     )
+    lanes: int = Field(
+        default=1,
+        ge=1,
+        le=8,
+        title="Number of detectors this camera may use concurrently for one frame's regions.",
+    )
     min_initialized: int | None = Field(
         default=None,
         title="Minimum initialization frames",

@@ -24,7 +24,7 @@ from frigate.const import (
 )
 from frigate.motion import MotionDetector
 from frigate.motion.improved_motion import ImprovedMotionDetector
-from frigate.object_detection.base import RemoteObjectDetector
+from frigate.object_detection.parallel import ParallelRemoteObjectDetector
 from frigate.ptz.autotrack import ptz_moving_at_frame_time
 from frigate.track import ObjectTracker
 from frigate.track.norfair_tracker import NorfairTracker
@@ -95,12 +95,13 @@ class CameraTracker(FrigateProcess):
             name=self.config.name,
             ptz_metrics=self.ptz_metrics,
         )
-        object_detector = RemoteObjectDetector(
+        object_detector = ParallelRemoteObjectDetector(
             self.config.name,
             self.labelmap,
             self.detection_queue,
             self.model_config,
             self.stop_event,
+            lanes=self.config.detect.lanes,
         )
 
         object_tracker = NorfairTracker(self.config, self.ptz_metrics)
@@ -181,7 +182,7 @@ def process_frames(
     camera_config: CameraConfig,
     frame_manager: FrameManager,
     motion_detector: MotionDetector,
-    object_detector: RemoteObjectDetector,
+    object_detector: ParallelRemoteObjectDetector,
     object_tracker: ObjectTracker,
     detected_objects_queue: Queue,
     camera_metrics: CameraMetrics,
@@ -405,18 +406,27 @@ def process_frames(
                 if obj["id"] in stationary_object_ids
             ]
 
-            for region in regions:
-                detections.extend(
-                    detect(
-                        camera_config.detect,
-                        object_detector,
-                        frame,
-                        model_config,
-                        region,
-                        camera_config.objects.track,
-                        camera_config.objects.filters,
-                    )
-                )
+            # Regions are independent -- each crops its own tensor and blocks on
+            # its own detector -- so they run across lanes when the camera has
+            # more than one. Results come back in region order, so what
+            # reduce_detections() sees is identical to the serial version.
+            # `frame` is bound as a default because it is rebound on every pass
+            # of the outer loop. map() consumes the callable before returning,
+            # so late binding would be harmless today -- binding it here keeps
+            # that true if map() ever becomes lazy.
+            for region_detections in object_detector.map(
+                lambda region, frame=frame: detect(
+                    camera_config.detect,
+                    object_detector,
+                    frame,
+                    model_config,
+                    region,
+                    camera_config.objects.track,
+                    camera_config.objects.filters,
+                ),
+                regions,
+            ):
+                detections.extend(region_detections)
 
             consolidated_detections = reduce_detections(frame_shape, detections)
 
