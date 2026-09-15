@@ -4,14 +4,15 @@
 # it travels with the exact commit its COPY paths were cut against — see the
 # build Job that invokes this, which uses this repo as Kaniko's git context.
 #
-# Base tag MUST match this branch's parent tag (v0.18.0-beta3). Bumping it
+# Base tag MUST match this branch's parent tag (v0.18.0). Bumping it
 # means rebasing the branch onto the new tag first, or the base's
 # video/detect.py/app.py no longer match what these five files expect around
 # them. (Was v0.17.2 — rebased 2026-08-08 to pick up ffmpeg 8.0, required for
 # the Reolink Duo3 http-flv bridge; frigate/video.py became frigate/video/
 # in upstream's "Split apart video.py" #22631 during that rebase, hence the
-# COPY destination change below.)
-FROM ghcr.io/blakeblackshear/frigate:0.18.0-beta3-tensorrt
+# COPY destination change below. Rebased again 2026-09-15 from v0.18.0-beta3
+# onto stable v0.18.0 — clean rebase, no conflicts, patch diffstat unchanged.)
+FROM ghcr.io/blakeblackshear/frigate:0.18.0-tensorrt
 
 COPY frigate/video/detect.py /opt/frigate/frigate/video/detect.py
 COPY frigate/app.py /opt/frigate/frigate/app.py
