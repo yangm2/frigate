@@ -16,6 +16,25 @@
 # files between v0.18.0 and v0.18.2, so the overlay reverts none of them.)
 FROM ghcr.io/blakeblackshear/frigate:0.18.2-tensorrt
 
+# Mesa 25.0.7 from bookworm-backports for VAAPI decode on the AMD iGPU (VCN
+# 3.1.2). The base's apt sources are bookworm only, so it carries Debian 12's
+# Mesa 22.3.6 (Dec 2022); bookworm-backports builds 25.0.7 against bookworm's
+# own libraries, unlike pulling trixie's. Why (yangm2/scripts,
+# Talos/k8s/amdgpu-probe/ANALYSIS.md, hypothesis T1'): 22.3.6 tells VCN the
+# decode target is twice its size (dt_size sums two planes that share one
+# BO; fixed by 23.3) and allocates H.264 tier-2 DPB buffers with no slack at
+# 2560x1920, and the doorbell's VCN decode faults just past such a buffer and
+# wedges the GPU. 25.0.7 allocates those as video buffers with a DPB bind.
+# Dry-run on the base, 2026-11-17: upgrades libdrm 2.4.114 -> 2.4.123 and the
+# Mesa packages, adds mesa-libgallium/libgbm1/libwayland-server0, removes
+# nothing. The last line fails the build if the VA driver is not 25.x.
+RUN echo "deb http://deb.debian.org/debian bookworm-backports main" \
+        > /etc/apt/sources.list.d/bookworm-backports.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends -t bookworm-backports mesa-va-drivers \
+    && rm -rf /var/lib/apt/lists/* \
+    && grep -a -o -m1 -E "Mesa 25\.[0-9]+\.[0-9]+" /usr/lib/x86_64-linux-gnu/dri/radeonsi_drv_video.so
+
 COPY frigate/video/detect.py /opt/frigate/frigate/video/detect.py
 COPY frigate/app.py /opt/frigate/frigate/app.py
 COPY frigate/camera/maintainer.py /opt/frigate/frigate/camera/maintainer.py
